@@ -71,7 +71,15 @@ export async function runWithPolicyCheck(blackduckPolicyCheck: GitHubCheck): Pro
     }
   }
 
-  const detectArgs = [`--blackduck.trust.cert=${DETECT_TRUST_CERT}`, `--blackduck.url=${BLACKDUCK_URL}`, `--blackduck.api.token=${BLACKDUCK_API_TOKEN}`, `--detect.blackduck.scan.mode=${SCAN_MODE}`, `--detect.output.path=${outputPath}`, `--detect.scan.output.path=${outputPath}`]
+  const detectArgs = [
+    `--blackduck.trust.cert=${DETECT_TRUST_CERT}`, 
+    `--blackduck.url=${BLACKDUCK_URL}`, 
+    `--blackduck.api.token=${BLACKDUCK_API_TOKEN}`, 
+    `--detect.blackduck.scan.mode=${SCAN_MODE}`, 
+    `--detect.output.path=${outputPath}`, 
+    `--detect.scan.output.path=${outputPath}`,
+    `--detect.cleanup=${SCAN_MODE !== 'RAPID'}`
+  ]
 
   const detectPath = await findOrDownloadDetect().catch(reason => {
     setFailed(`Could not download ${TOOL_NAME} ${DETECT_VERSION}: ${reason}`)
@@ -136,6 +144,16 @@ export async function runWithPolicyCheck(blackduckPolicyCheck: GitHubCheck): Pro
   } else {
     info(`${TOOL_NAME} executed in ${SCAN_MODE} mode. Skipping policy check.`)
     blackduckPolicyCheck.skipCheck()
+
+    const runsPath = path.posix.join(outputPath, 'runs')
+    const statusJsonGlobber = await create(`${runsPath}/runs/**/status.json`)
+    const statusJsonPaths = await statusJsonGlobber.glob()
+    if (statusJsonPaths.length) {
+      if (statusJsonPaths.length > 1) 
+        warning(`Found multiple status.json files in ${outputPath}, will only use the first one for outputs:\n${statusJsonPaths.join('\n')}`)
+      const statusJson = JSON.parse(fs.readFileSync(statusJsonPaths[0]))
+      debug(JSON.stringify(statusJson, undefined, 2));
+    } else warning(`Could not find any status.json file in ${outputPath}`)
   }
 
   const diagnosticMode = process.env.DETECT_DIAGNOSTIC?.toLowerCase() === 'true'
